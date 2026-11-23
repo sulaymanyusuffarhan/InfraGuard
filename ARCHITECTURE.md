@@ -18,3 +18,5 @@ Split into `core:model`, `core:network`, `core:security`, `core:database`, and f
 6. Server-generated reports, integration tests, accessibility review, threat modeling, signed APK and security assessment.
 
 Missing services: identity, monitoring/SNMP collectors, endpoint agents, vulnerability scanners, centralized logging, patch orchestration, firewall/VPN gateway, helpdesk, push service, report generation, administrative web interface and immutable audit store.
+
+The initial splash is a short Compose-branded transition using the supplied logo; it does not imply that a backend is loading or authenticated. Navigation selection derives from the Navigation back stack, so system Back and top-bar destinations stay consistent.

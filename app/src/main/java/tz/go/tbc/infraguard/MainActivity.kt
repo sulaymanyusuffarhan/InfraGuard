@@ -4,6 +4,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.*
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import kotlinx.coroutines.delay
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -43,14 +48,42 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent {
         val vm: OperationsViewModel = viewModel()
         val colors = if (vm.dark) darkColorScheme(primary = Color(0xFF9EC9FF), secondary = Color(0xFF76D6D4)) else lightColorScheme(primary = Navy, secondary = Blue, tertiary = Teal, error = Red)
-        MaterialTheme(colorScheme = colors) { if (vm.role == null) Login(vm) else AppShell(vm) }
+        MaterialTheme(colorScheme = colors) {
+            var showSplash by remember { mutableStateOf(true) }
+            LaunchedEffect(Unit) { delay(1400); showSplash = false }
+            when {
+                showSplash -> SplashScreen()
+                vm.role == null -> Login(vm)
+                else -> AppShell(vm)
+            }
+        }
     } }
+}
+@Composable private fun BrandLogo(modifier: Modifier = Modifier) {
+    Image(
+        painter = painterResource(R.drawable.tbc_nms_logo),
+        contentDescription = "TBC Network and Security Management System shield emblem",
+        modifier = modifier,
+        contentScale = ContentScale.Fit
+    )
+}
+@Composable private fun SplashScreen() {
+    Surface(Modifier.fillMaxSize(), color = Navy) {
+        Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            BrandLogo(Modifier.fillMaxWidth().heightIn(max = 360.dp))
+            Spacer(Modifier.height(24.dp))
+            Text("TBC InfraGuard", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color.White)
+            Text("Infrastructure · Network · Security", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFC1D9EF))
+            Spacer(Modifier.height(32.dp))
+            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(28.dp))
+        }
+    }
 }
 @Composable private fun Login(vm: OperationsViewModel) {
     var selected by remember { mutableStateOf(Role.SYSTEM_ADMIN) }
     var expanded by remember { mutableStateOf(false) }
-    Surface(Modifier.fillMaxSize()) { Column(Modifier.fillMaxSize().padding(28.dp), verticalArrangement = Arrangement.Center) {
-        Icon(Icons.Default.Shield, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(56.dp))
+    Surface(Modifier.fillMaxSize()) { Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp), verticalArrangement = Arrangement.Center) {
+        BrandLogo(Modifier.fillMaxWidth().height(200.dp))
         Spacer(Modifier.height(20.dp)); Text("TBC InfraGuard", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
         Text("Operations · Infrastructure · Security", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(24.dp)); DemoBanner()
@@ -67,17 +100,18 @@ private val tabs = listOf(Tab("Overview", Icons.Default.Dashboard), Tab("Infrast
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun AppShell(vm: OperationsViewModel) {
     val nav = rememberNavController()
-    var current by remember { mutableStateOf("Overview") }
-    Scaffold(topBar = { TopAppBar(title = { Column { Text("TBC InfraGuard", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(current, style = MaterialTheme.typography.labelMedium) } }, actions = {
-        IconButton(onClick = { nav.navigate("notifications"); current = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
-        IconButton(onClick = { nav.navigate("profile"); current = "Profile" }) { Icon(Icons.Default.AccountCircle, "Profile") }
-    }) }, bottomBar = { NavigationBar { tabs.forEach { tab -> NavigationBarItem(selected = current == tab.label, onClick = { current = tab.label; nav.navigate(tab.label) { popUpTo("Overview") { saveState = true }; launchSingleTop = true; restoreState = true } }, icon = { Icon(tab.icon, null) }, label = { Text(tab.label) }) } } }) { padding ->
+    val backStackEntry by nav.currentBackStackEntryAsState()
+    val current = backStackEntry?.destination?.route ?: "Overview"
+    Scaffold(topBar = { TopAppBar(title = { Column { Text("TBC InfraGuard", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(current.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelMedium) } }, actions = {
+        IconButton(onClick = { nav.navigate("notifications") }) { Icon(Icons.Default.Notifications, "Notifications") }
+        IconButton(onClick = { nav.navigate("profile") }) { Icon(Icons.Default.AccountCircle, "Profile") }
+    }) }, bottomBar = { NavigationBar { tabs.forEach { tab -> NavigationBarItem(selected = current == tab.label, onClick = { nav.navigate(tab.label) { popUpTo("Overview") { saveState = true }; launchSingleTop = true; restoreState = true } }, icon = { Icon(tab.icon, null) }, label = { Text(tab.label) }) } } }) { padding ->
         NavHost(navController = nav, startDestination = "Overview", modifier = Modifier.padding(padding)) {
             composable("Overview") { Overview(vm) }
             composable("Infrastructure") { Infrastructure(vm) }
             composable("Security") { Security(vm) }
             composable("Assets") { Assets(vm) }
-            composable("More") { More(vm, onNavigate = { route -> current = route; nav.navigate(route) }) }
+            composable("More") { More(vm, onNavigate = { route -> nav.navigate(route) }) }
             composable("notifications") { Notifications(vm) }
             composable("profile") { Profile(vm) }
             composable("patches") { PendingModule("Patch management", "ONE → SOME → MANY rollout, approvals, rollback and emergency abort require a connected management service.") }
