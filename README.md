@@ -15,3 +15,6 @@ The splash and login screens use the supplied TBC-NMS shield artwork (`app/src/m
 
 ## Live monitoring pilot
 Infrastructure can now show **real TCP reachability** via the bundled [monitoring service](backend/README.md). It requires approved targets, deployment on an internal server, an HTTPS/VPN proxy and a per-session token. The rest of the application (overview, security, assets and notifications) still uses visibly marked sample data. Do not interpret demo role selection as authentication or production authorization.
+
+## On-device Wi-Fi view (no sign-in)
+The app now opens directly into the dashboard. Infrastructure displays the active Wi-Fi IPv4 address and gateway without a backend, VPN or token. A user-initiated local TCP check can discover responding hosts on ports 22, 80 and 443 within a private IPv4 /24-or-smaller subnet (max 254 addresses). No automatic scan, full device enumeration, SSH access or vulnerability scan is performed. Android does not expose the SSID without additional location permission, which this app does not request. Other screens retain explicitly marked sample content. Server monitoring remains optional and separate.
