@@ -12,3 +12,6 @@ See [BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md), [ARCHITECTURE.md](ARCHITECTU
 
 ## Brand asset
 The splash and login screens use the supplied TBC-NMS shield artwork (`app/src/main/res/drawable-nodpi/tbc_nms_logo.webp`), resized for mobile delivery. Its embedded “TBC-NMS” wording is part of the supplied image; the surrounding product name remains **TBC InfraGuard**. Confirm artwork usage rights and final naming with TBC before distribution.
+
+## Live monitoring pilot
+Infrastructure can now show **real TCP reachability** via the bundled [monitoring service](backend/README.md). It requires approved targets, deployment on an internal server, an HTTPS/VPN proxy and a per-session token. The rest of the application (overview, security, assets and notifications) still uses visibly marked sample data. Do not interpret demo role selection as authentication or production authorization.

@@ -24,6 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -41,7 +43,39 @@ class OperationsViewModel : ViewModel() {
         private set
     var dark by mutableStateOf(false)
     fun login(selected: Role) { role = selected }
-    fun logout() { role = null }
+    var liveDevices by mutableStateOf<List<LiveDevice>>(emptyList())
+        private set
+    var monitorError by mutableStateOf<String?>(null)
+        private set
+    var monitorLoading by mutableStateOf(false)
+        private set
+    var monitorConnected by mutableStateOf(false)
+        private set
+    private var endpoint = ""
+    private var accessToken = ""
+    private val monitoringClient = MonitoringClient()
+    fun connectMonitoring(url: String, token: String) {
+        if (monitorLoading) return
+        monitorLoading = true
+        monitorError = null
+        viewModelScope.launch {
+            try {
+                val readings = monitoringClient.fetch(url, token)
+                endpoint = url
+                accessToken = token
+                liveDevices = readings
+                monitorConnected = true
+            } catch (e: Exception) {
+                monitorError = e.message ?: "Unable to connect to monitoring service"
+                disconnectMonitoring()
+            } finally { monitorLoading = false }
+        }
+    }
+    fun refreshMonitoring() { if (monitorConnected) connectMonitoring(endpoint, accessToken) }
+    fun disconnectMonitoring() {
+        endpoint = ""; accessToken = ""; liveDevices = emptyList(); monitorConnected = false
+    }
+    fun logout() { disconnectMonitoring(); role = null }
     fun allowed(permission: Permission) = role?.permissions?.contains(permission) == true
 }
 class MainActivity : ComponentActivity() {
@@ -122,11 +156,11 @@ private val tabs = listOf(Tab("Overview", Icons.Default.Dashboard), Tab("Infrast
         }
     }
 }
-@Composable private fun Page(title: String, subtitle: String, content: @Composable ColumnScope.() -> Unit) {
+@Composable private fun Page(title: String, subtitle: String, showDemo: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 12.dp)) {
         Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(16.dp)); DemoBanner(); Spacer(Modifier.height(18.dp)); content(); Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp)); if (showDemo) { DemoBanner(); Spacer(Modifier.height(18.dp)) }; content(); Spacer(Modifier.height(24.dp))
     }
 }
 @Composable private fun DemoBanner() { Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(12.dp)) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Info, null); Spacer(Modifier.width(10.dp)); Text("DEMONSTRATION DATA · Not connected to TBC systems", style = MaterialTheme.typography.labelMedium) } } }
@@ -148,13 +182,48 @@ private val tabs = listOf(Tab("Overview", Icons.Default.Dashboard), Tab("Infrast
     }
 }
 @Composable private fun Infrastructure(vm: OperationsViewModel) {
-    val devices by vm.repo.devices.collectAsState(); var query by remember { mutableStateOf("") }
-    Page("Infrastructure", "Network and server health") {
+    var url by remember { mutableStateOf("") }
+    var token by remember { mutableStateOf("") }
+    var query by remember { mutableStateOf("") }
+    Page("Infrastructure", "Live TCP availability from your monitoring service", showDemo = false) {
         if (!vm.allowed(Permission.VIEW_INFRA)) { Restricted(); return@Page }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Stat("Online", "${devices.count { it.status == "Online" }}", Teal); Stat("Attention", "${devices.count { it.status != "Online" }}", Amber) }
-        Section("Device inventory"); OutlinedTextField(query, { query = it }, label = { Text("Search device or IP") }, leadingIcon = { Icon(Icons.Default.Search, null) }, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(12.dp)); devices.filter { it.name.contains(query, true) || it.address.contains(query, true) }.forEach { InfoCard(it.name, "${it.kind} · ${it.address}\n${it.detail}", it.status) }
-        InfoCard("Monitoring integration", "ICMP, TCP/UDP, SNMP, uptime and dependencies are collected by the backend, not by this Android device.")
+        if (!vm.monitorConnected) {
+            InfoCard("Connect a monitoring service", "Deploy the included backend on an internal network behind HTTPS. Configure approved targets on the server; no probes run on this phone.")
+            OutlinedTextField(url, { url = it }, label = { Text("HTTPS monitoring origin") },
+                placeholder = { Text("https://monitor.example.org") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(token, { token = it }, label = { Text("Monitoring access token") },
+                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(), singleLine = true,
+                modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(10.dp))
+            Button(onClick = { vm.connectMonitoring(url, token); token = "" }, enabled = !vm.monitorLoading && url.isNotBlank() && token.isNotBlank()) {
+                Text(if (vm.monitorLoading) "Connecting…" else "Connect & load readings")
+            }
+            Text("Token is kept only in memory until disconnect or logout. This is a pilot token, not organization sign-in.", style = MaterialTheme.typography.bodySmall)
+        } else {
+            Text("LIVE API · TCP connect checks only", color = Teal, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Stat("Online", "${vm.liveDevices.count { it.status == "Online" }}", Teal)
+                Stat("Offline", "${vm.liveDevices.count { it.status == "Offline" }}", Red)
+            }
+            Spacer(Modifier.height(12.dp))
+            Row {
+                Button(onClick = vm::refreshMonitoring, enabled = !vm.monitorLoading) { Text(if (vm.monitorLoading) "Refreshing…" else "Refresh") }
+                Spacer(Modifier.width(8.dp))
+                OutlinedButton(onClick = vm::disconnectMonitoring) { Text("Disconnect") }
+            }
+            Section("Approved targets")
+            OutlinedTextField(query, { query = it }, label = { Text("Search device or IP") }, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(12.dp))
+            vm.liveDevices.filter { it.name.contains(query, true) || it.address.contains(query, true) }.forEach {
+                InfoCard(it.name, "${it.address}:${it.port} · ${it.latencyMs?.let { ms -> "$ms ms" } ?: "No TCP response"}\nChecked ${it.checkedAt}", it.status)
+            }
+            if (vm.liveDevices.isEmpty()) InfoCard("No readings yet", "The backend has not completed its first probe cycle. Refresh shortly.")
+        }
+        vm.monitorError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 12.dp)) }
+        Section("Not yet integrated")
+        InfoCard("Extended monitoring", "ICMP, SNMP, resource utilization, dependencies and alert escalation require dedicated collectors and a production monitoring platform.")
     }
 }
 @Composable private fun Security(vm: OperationsViewModel) {

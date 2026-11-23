@@ -18,3 +18,6 @@ Base URL is environment-specific HTTPS (`.env.example` is a template, not read b
 | Reports | `POST /reports`, `GET /reports/{id}/download` | Server-side redaction and signed short-lived download |
 
 Streams: `GET /events` via authenticated SSE or WebSocket with resumption cursor. Push messages carry opaque references, not confidential details. Backend integrates SNMP collectors, SIEM, EDR/agents, Tripwire-equivalent FIM, scanners, patch manager and FCM. API must never expose collectors directly to the public internet.
+
+## Implemented pilot endpoint
+`GET /v1/monitoring/devices` requires `Authorization: Bearer <monitor-token>` and returns `{ "source": "tcp-connect", "devices": [{ "id", "name", "address", "port", "status": "Online|Offline", "latencyMs": number|null, "checkedAt": "UTC ISO-8601" }] }`. Targets are server-configured. This is a limited pilot contract, not the proposed full backend contract above.
