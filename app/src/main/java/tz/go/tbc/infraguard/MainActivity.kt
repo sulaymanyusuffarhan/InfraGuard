@@ -23,6 +23,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import android.net.ConnectivityManager
+import android.net.Network
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
@@ -39,7 +45,7 @@ private val Amber = Color(0xFF996000)
 
 class OperationsViewModel : ViewModel() {
     val repo: OperationsRepository = DemoRepository()
-    var role by mutableStateOf<Role?>(null)
+    var role by mutableStateOf<Role?>(Role.SYSTEM_ADMIN)
         private set
     var dark by mutableStateOf(false)
     fun login(selected: Role) { role = selected }
@@ -75,7 +81,7 @@ class OperationsViewModel : ViewModel() {
     fun disconnectMonitoring() {
         endpoint = ""; accessToken = ""; liveDevices = emptyList(); monitorConnected = false
     }
-    fun logout() { disconnectMonitoring(); role = null }
+    fun logout() { disconnectMonitoring() }
     fun allowed(permission: Permission) = role?.permissions?.contains(permission) == true
 }
 class MainActivity : ComponentActivity() {
@@ -87,7 +93,6 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) { delay(1400); showSplash = false }
             when {
                 showSplash -> SplashScreen()
-                vm.role == null -> Login(vm)
                 else -> AppShell(vm)
             }
         }
@@ -112,22 +117,6 @@ class MainActivity : ComponentActivity() {
             CircularProgressIndicator(color = Color.White, modifier = Modifier.size(28.dp))
         }
     }
-}
-@Composable private fun Login(vm: OperationsViewModel) {
-    var selected by remember { mutableStateOf(Role.SYSTEM_ADMIN) }
-    var expanded by remember { mutableStateOf(false) }
-    Surface(Modifier.fillMaxSize()) { Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp), verticalArrangement = Arrangement.Center) {
-        BrandLogo(Modifier.fillMaxWidth().height(200.dp))
-        Spacer(Modifier.height(20.dp)); Text("TBC InfraGuard", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-        Text("Operations · Infrastructure · Security", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(24.dp)); DemoBanner()
-        Spacer(Modifier.height(24.dp)); Text("Explore as", style = MaterialTheme.typography.labelLarge)
-        Box { OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) { Text(selected.title); Spacer(Modifier.weight(1f)); Icon(Icons.Default.ArrowDropDown, null) }
-            DropdownMenu(expanded, onDismissRequest = { expanded = false }) { Role.entries.forEach { role -> DropdownMenuItem(text = { Text(role.title) }, onClick = { selected = role; expanded = false }) } }
-        }
-        Spacer(Modifier.height(14.dp)); Button(onClick = { vm.login(selected) }, modifier = Modifier.fillMaxWidth()) { Text("Enter demonstration") }
-        Text("No credentials are collected. Production sign-in requires an identity provider and server-enforced authorization.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    } }
 }
 private data class Tab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
 private val tabs = listOf(Tab("Overview", Icons.Default.Dashboard), Tab("Infrastructure", Icons.Default.Router), Tab("Security", Icons.Default.Security), Tab("Assets", Icons.Default.Inventory2), Tab("More", Icons.Default.MoreHoriz))
@@ -178,53 +167,95 @@ private val tabs = listOf(Tab("Overview", Icons.Default.Dashboard), Tab("Infrast
         InfoCard("Core Router 01 is unreachable", "Connected office network services may be affected. Downstream alerts should be suppressed by the monitoring backend.", "Critical")
         InfoCard("Playout Server resources elevated", "CPU 81% · RAM 68% · Disk 74%", "Warning")
         Section("Operational readiness")
-        InfoCard("Backend connection", "Not configured. No live probes, scans, deployments or remote access are performed.", "Demo")
+        InfoCard("Wi-Fi discovery", "Open Infrastructure for real, on-device Wi-Fi information and manually initiated local discovery. Other dashboard numbers are sample data.", "Available")
     }
 }
 @Composable private fun Infrastructure(vm: OperationsViewModel) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var snapshot by remember { mutableStateOf(WifiDiscovery.current(context)) }
+    var hosts by remember { mutableStateOf<List<DiscoveredHost>>(emptyList()) }
+    var scanning by remember { mutableStateOf(false) }
+    var scanCompleted by remember { mutableStateOf(false) }
+    var gatewayResult by remember { mutableStateOf<Boolean?>(null) }
+    var checkedGateway by remember { mutableStateOf(false) }
+    var scanJob by remember { mutableStateOf<Job?>(null) }
+    DisposableEffect(context) {
+        val manager = context.getSystemService(ConnectivityManager::class.java)
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) { snapshot = WifiDiscovery.current(context); hosts = emptyList(); scanCompleted = false; checkedGateway = false }
+            override fun onLost(network: Network) { snapshot = WifiDiscovery.current(context); hosts = emptyList(); scanCompleted = false; checkedGateway = false; scanJob?.cancel() }
+            override fun onCapabilitiesChanged(network: Network, capabilities: android.net.NetworkCapabilities) {
+                snapshot = WifiDiscovery.current(context)
+            }
+            override fun onLinkPropertiesChanged(network: Network, properties: android.net.LinkProperties) {
+                snapshot = WifiDiscovery.current(context)
+            }
+        }
+        manager.registerDefaultNetworkCallback(callback)
+        onDispose { manager.unregisterNetworkCallback(callback); scanJob?.cancel() }
+    }
+    Page("Infrastructure", "Your current Wi-Fi connection", showDemo = false) {
+        val wifi = snapshot
+        if (wifi == null) {
+            InfoCard("No active Wi-Fi connection", "Connect this phone to Wi-Fi to view its local address and gateway. Cellular connections are not scanned.")
+        } else {
+            Text("ON-DEVICE · CURRENT WI-FI", color = Teal, fontWeight = FontWeight.Bold)
+            InfoCard("Connection", "Phone IP: ${wifi.ip.hostAddress} / ${wifi.prefix}\nGateway: ${wifi.gateway?.hostAddress ?: "Not provided by network"}")
+            Text("Wi-Fi name is not shown because Android requires additional location permission for SSID access.", style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(10.dp))
+            OutlinedButton(onClick = {
+                checkedGateway = false
+                scope.launch { gatewayResult = WifiDiscovery.gatewayCheck(wifi); checkedGateway = true }
+            }, enabled = wifi.gateway != null) { Text("Check gateway web ports") }
+            if (checkedGateway) Text(if (gatewayResult == true) "Gateway TCP 80 or 443 responded" else "No response on TCP 80/443; gateway may still be reachable", style = MaterialTheme.typography.bodyMedium)
+            Section("Local device discovery")
+            Text("Only scan Wi-Fi networks you own or are authorized to inspect. A manual scan checks TCP ports 22, 80 and 443 on this private IPv4 subnet only (maximum 254 addresses). No data is uploaded.")
+            val candidates = WifiDiscovery.candidates(wifi)
+            if (candidates.isEmpty()) InfoCard("Scan unavailable", "Discovery requires a private IPv4 Wi-Fi subnet with prefix /24 through /30. Wi-Fi details remain available.")
+            else {
+                Row {
+                    Button(onClick = {
+                        hosts = emptyList(); scanCompleted = false; scanning = true
+                        scanJob = scope.launch {
+                            try { hosts = WifiDiscovery.discover(wifi); scanCompleted = true }
+                            catch (_: CancellationException) { /* Network changed or user cancelled. */ }
+                            finally { scanning = false }
+                        }
+                    }, enabled = !scanning) { Text(if (scanning) "Scanning…" else "Start discovery") }
+                    if (scanning) { Spacer(Modifier.width(8.dp)); OutlinedButton(onClick = { scanJob?.cancel() }) { Text("Cancel") } }
+                }
+                if (scanCompleted && !scanning) {
+                    Text("${hosts.size} hosts responded on selected ports · ${candidates.size} addresses eligible", style = MaterialTheme.typography.bodySmall)
+                    hosts.forEach { InfoCard(it.address, "Open TCP ports: ${it.openPorts.joinToString()}", "Responded") }
+                    Text("Not listed does not mean offline. Firewalls, client isolation and closed ports hide devices.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        Section("Server monitoring (optional)")
+        Text("The separate authenticated monitoring service remains available for approved remote targets; local discovery does not use it.", style = MaterialTheme.typography.bodySmall)
+        MonitoringConnection(vm)
+    }
+}
+@Composable private fun MonitoringConnection(vm: OperationsViewModel) {
+    var expanded by remember { mutableStateOf(false) }
     var url by remember { mutableStateOf("") }
     var token by remember { mutableStateOf("") }
-    var query by remember { mutableStateOf("") }
-    Page("Infrastructure", "Live TCP availability from your monitoring service", showDemo = false) {
-        if (!vm.allowed(Permission.VIEW_INFRA)) { Restricted(); return@Page }
-        if (!vm.monitorConnected) {
-            InfoCard("Connect a monitoring service", "Deploy the included backend on an internal network behind HTTPS. Configure approved targets on the server; no probes run on this phone.")
-            OutlinedTextField(url, { url = it }, label = { Text("HTTPS monitoring origin") },
-                placeholder = { Text("https://monitor.example.org") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(token, { token = it }, label = { Text("Monitoring access token") },
-                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(), singleLine = true,
-                modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(10.dp))
-            Button(onClick = { vm.connectMonitoring(url, token); token = "" }, enabled = !vm.monitorLoading && url.isNotBlank() && token.isNotBlank()) {
-                Text(if (vm.monitorLoading) "Connecting…" else "Connect & load readings")
-            }
-            Text("Token is kept only in memory until disconnect or logout. This is a pilot token, not organization sign-in.", style = MaterialTheme.typography.bodySmall)
-        } else {
-            Text("LIVE API · TCP connect checks only", color = Teal, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Stat("Online", "${vm.liveDevices.count { it.status == "Online" }}", Teal)
-                Stat("Offline", "${vm.liveDevices.count { it.status == "Offline" }}", Red)
-            }
-            Spacer(Modifier.height(12.dp))
-            Row {
-                Button(onClick = vm::refreshMonitoring, enabled = !vm.monitorLoading) { Text(if (vm.monitorLoading) "Refreshing…" else "Refresh") }
-                Spacer(Modifier.width(8.dp))
-                OutlinedButton(onClick = vm::disconnectMonitoring) { Text("Disconnect") }
-            }
-            Section("Approved targets")
-            OutlinedTextField(query, { query = it }, label = { Text("Search device or IP") }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(12.dp))
-            vm.liveDevices.filter { it.name.contains(query, true) || it.address.contains(query, true) }.forEach {
-                InfoCard(it.name, "${it.address}:${it.port} · ${it.latencyMs?.let { ms -> "$ms ms" } ?: "No TCP response"}\nChecked ${it.checkedAt}", it.status)
-            }
-            if (vm.liveDevices.isEmpty()) InfoCard("No readings yet", "The backend has not completed its first probe cycle. Refresh shortly.")
+    TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide server monitoring" else "Show server monitoring") }
+    if (!expanded) return
+    if (!vm.monitorConnected) {
+        OutlinedTextField(url, { url = it }, label = { Text("HTTPS monitoring origin") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(token, { token = it }, label = { Text("Access token") }, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+        Button(onClick = { vm.connectMonitoring(url, token); token = "" }, enabled = !vm.monitorLoading && url.isNotBlank() && token.isNotBlank()) { Text("Connect") }
+    } else {
+        Text("LIVE SERVER API · TCP checks")
+        Row {
+            Button(onClick = vm::refreshMonitoring, enabled = !vm.monitorLoading) { Text("Refresh") }
+            OutlinedButton(onClick = vm::disconnectMonitoring) { Text("Disconnect") }
         }
-        vm.monitorError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 12.dp)) }
-        Section("Not yet integrated")
-        InfoCard("Extended monitoring", "ICMP, SNMP, resource utilization, dependencies and alert escalation require dedicated collectors and a production monitoring platform.")
+        vm.liveDevices.forEach { InfoCard(it.name, "${it.address}:${it.port} · Checked ${it.checkedAt}", it.status) }
     }
+    vm.monitorError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 }
 @Composable private fun Security(vm: OperationsViewModel) {
     val incidents by vm.repo.incidents.collectAsState(); val findings by vm.repo.findings.collectAsState(); var form by remember { mutableStateOf(false) }
@@ -257,7 +288,7 @@ private val tabs = listOf(Tab("Overview", Icons.Default.Dashboard), Tab("Infrast
     Section("Preferences"); Row(verticalAlignment = Alignment.CenterVertically) { Text("Dark mode", Modifier.weight(1f)); Switch(vm.dark, { vm.dark = it }) }
 } }
 @Composable private fun Notifications(vm: OperationsViewModel) { val notices by vm.repo.notices.collectAsState(); Page("Notifications", "Sample operational alerts") { notices.forEach { InfoCard(it.title, it.time, it.severity) }; InfoCard("Push notifications", "Unavailable until Firebase or an equivalent gateway is configured with server-side topic authorization.") } }
-@Composable private fun Profile(vm: OperationsViewModel) { Page("Profile", "Demonstration session") { InfoCard(vm.role?.title ?: "Unknown", "TBC IT Department · Demo role · No production identity authenticated"); Section("Permissions"); vm.role?.permissions?.forEach { Text("• ${it.name.replace('_', ' ')}", Modifier.padding(vertical = 4.dp)) }; Spacer(Modifier.height(20.dp)); OutlinedButton(onClick = vm::logout) { Icon(Icons.Default.Logout, null); Spacer(Modifier.width(8.dp)); Text("Leave demonstration") } } }
+@Composable private fun Profile(vm: OperationsViewModel) { Page("Profile", "Local-only access") { InfoCard(vm.role?.title ?: "Unknown", "No organizational sign-in. Roles in sample modules do not enforce access."); Section("Permissions"); vm.role?.permissions?.forEach { Text("• ${it.name.replace('_', ' ')}", Modifier.padding(vertical = 4.dp)) }; Spacer(Modifier.height(20.dp)); OutlinedButton(onClick = vm::logout) { Icon(Icons.Default.Logout, null); Spacer(Modifier.width(8.dp)); Text("Clear server session") } } }
 @Composable private fun PendingModule(title: String, message: String) { Page(title, "Integration required") { InfoCard("Not available in demonstration mode", message); Text("No operation was submitted or executed.", style = MaterialTheme.typography.bodySmall) } }
 @Composable private fun IncidentForm(onDismiss: () -> Unit, onSave: (Incident) -> Unit) {
     var title by remember { mutableStateOf("") }; var description by remember { mutableStateOf("") }; var category by remember { mutableStateOf("Phishing") }; var severity by remember { mutableStateOf("Medium") }

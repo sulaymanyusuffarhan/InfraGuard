@@ -8,3 +8,6 @@ No real credentials, network permissions, production endpoints or secret materia
 
 ## Monitoring pilot limitations
 The pilot uses one static bearer secret configured in server environment and manually entered on the phone. It has no user identity, per-device permissions, token rotation endpoint, audit trail, secret vault or rate limiting; it must remain on a restricted internal network behind a TLS/VPN proxy. The Android app does not persist the token and rejects non-HTTPS or redirected API requests. A connected pilot does **not** authenticate the user to other modules. The overview and other modules remain sample data.
+
+## Local Wi-Fi mode
+No organization sign-in is required for local Wi-Fi details or manual discovery. The app can only see what the phone can access on its connected Wi-Fi network; users must have permission to inspect that network. Scans are never automatic and are limited in scope/concurrency. No SSID/location permission is requested. Sample roles are not access controls. Do not use this mode as a security assessment or inventory source of truth.
