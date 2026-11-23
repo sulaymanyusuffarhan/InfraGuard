@@ -1,0 +1,7 @@
+# Security posture and limitations
+
+**Not production-ready.** Demo role selection is not login. All data is fabricated. Buttons marked unavailable do not send requests. Client-side checks only improve UX; the backend must enforce every permission, ownership rule, approval and audit record.
+
+Before production: OIDC PKCE and managed SSO; Android Keystore-backed token storage and biometric step-up for privileged operations; enforce TLS, pinning policy with rotation plan, certificate validation, token revocation, idle timeout and device integrity policy. Reject unauthorized scope on every backend route; separate approver from requester. Never store SSH secrets on device. All scans need documented approval and server-side target allowlists. All patch changes require approvals, safe maintenance windows, rollback plans and emergency abort. Audit events are append-only, timestamped and retained by policy. Redact logs, evidence and notification payloads; limit cache lifetime; disable backups for sensitive data. Conduct OWASP MASVS review, penetration testing, dependency scanning and incident recovery drills before deployment.
+
+No real credentials, network permissions, production endpoints or secret material are included in this repository.
