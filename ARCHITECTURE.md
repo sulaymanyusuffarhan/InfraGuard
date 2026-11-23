@@ -20,3 +20,6 @@ Split into `core:model`, `core:network`, `core:security`, `core:database`, and f
 Missing services: identity, monitoring/SNMP collectors, endpoint agents, vulnerability scanners, centralized logging, patch orchestration, firewall/VPN gateway, helpdesk, push service, report generation, administrative web interface and immutable audit store.
 
 The initial splash is a short Compose-branded transition using the supplied logo; it does not imply that a backend is loading or authenticated. Navigation selection derives from the Navigation back stack, so system Back and top-bar destinations stay consistent.
+
+## Pilot monitoring slice
+`backend/monitor.py` runs bounded TCP connect checks against admin-owned configured literal IP targets and publishes timestamped readings via an authenticated read-only API. The Android `MonitoringClient` accepts only HTTPS origins, refuses redirects, makes requests off the UI thread, and holds its token in memory only. This is manually refreshed; no background collection occurs on Android. The backend is bound to loopback and needs an internal TLS/VPN proxy. Shared identity, RBAC, collector isolation, availability history and escalation are future requirements. All other modules still show labeled sample records.

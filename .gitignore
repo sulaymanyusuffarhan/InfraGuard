@@ -7,3 +7,6 @@ local.properties
 *.jks
 *.keystore
 .env
+backend/targets.json
+__pycache__/
+*.pyc
