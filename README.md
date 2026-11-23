@@ -9,3 +9,6 @@ Native Android operations console for the Tanzania Broadcasting Corporation IT d
 - Explicit integration-required screens for patching, change approvals, remote access, helpdesk and reporting. These do not execute operations.
 
 See [BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md), [ARCHITECTURE.md](ARCHITECTURE.md), [API_INTEGRATION.md](API_INTEGRATION.md), and [SECURITY.md](SECURITY.md).
+
+## Brand asset
+The splash and login screens use the supplied TBC-NMS shield artwork (`app/src/main/res/drawable-nodpi/tbc_nms_logo.webp`), resized for mobile delivery. Its embedded “TBC-NMS” wording is part of the supplied image; the surrounding product name remains **TBC InfraGuard**. Confirm artwork usage rights and final naming with TBC before distribution.
