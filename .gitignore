@@ -8,3 +8,5 @@ local.properties
 *.keystore
 .env
 backend/targets.json
+__pycache__/
+*.pyc
