@@ -1,28 +1,7 @@
-# Architecture and phased delivery
+# Architecture
 
-## Repository assessment
-The initial repository contained only a one-line README. No existing application or backend was available to preserve.
+Native Android application (Kotlin, Compose Material 3, single `:app` module). `WifiDiscovery` reads the active Wi-Fi IPv4 link properties and performs bounded TCP checks on private /24–/30 subnets. `DiscoveryStore` persists responding IP addresses, ports and last-seen timestamps in app-private SQLite. `OperationsViewModel` owns the foreground-only network callback, cancellation and current scan state. Overview, Infrastructure and Assets consume real local results; no fabricated records are seeded. Security and notifications are empty until integrated. Backend TCP monitoring remains an optional separate mode (`backend/README.md`).
 
-## Current implementation
-Single `:app` module. `Domain.kt` contains models, role capability mapping, repository interface and in-memory demonstration implementation. `MainActivity.kt` contains Compose screens and a ViewModel holding session-scoped demo state. `StateFlow` feeds Compose. Demo roles are explicitly not authentication or authorization. Data is ephemeral; no network permission is requested.
+The callback is lifecycle-scoped: connectivity changes and foreground resume trigger a scan; leaving the app cancels it. No background service runs while the app is closed. Records are keyed by subnet/IP, not by Wi-Fi SSID; different networks using the same subnet can share records. A responding port is evidence of reachability, not device ownership, wireless connectivity or system health. Closed ports, client isolation and sleeping hosts result in incomplete discovery.
 
-## Production target
-Split into `core:model`, `core:network`, `core:security`, `core:database`, and feature modules once backend contracts stabilize. Use OIDC authorization-code + PKCE with external browser, short-lived tokens protected by Android Keystore, encrypted storage, server-side RBAC/ABAC and step-up auth. Inject Retrofit/Ktor repositories via Hilt; use Room only for authorized, minimized offline caches, DataStore for non-secret preferences. Polling or authenticated WebSocket/SSE streams should be lifecycle-aware and back off on failure. Never connect the phone directly to SNMP, SSH or endpoint agents.
-
-## Delivery roadmap
-1. Foundation/demo UI (implemented); replace demo entry with real OIDC before production.
-2. Monitoring adapter and dependency-aware alerting on backend; server and network health.
-3. Asset ownership, agent-based inspection, scoped scan requests and remediation workflows.
-4. Incidents, evidence upload, immutable audit and authorized logs; notification gateway.
-5. Approved ONE/SOME/MANY patch rollout, change workflow and gateway-only remote access.
-6. Server-generated reports, integration tests, accessibility review, threat modeling, signed APK and security assessment.
-
-Missing services: identity, monitoring/SNMP collectors, endpoint agents, vulnerability scanners, centralized logging, patch orchestration, firewall/VPN gateway, helpdesk, push service, report generation, administrative web interface and immutable audit store.
-
-The initial splash is a short Compose-branded transition using the supplied logo; it does not imply that a backend is loading or authenticated. Navigation selection derives from the Navigation back stack, so system Back and top-bar destinations stay consistent.
-
-## Pilot monitoring slice
-`backend/monitor.py` runs bounded TCP connect checks against admin-owned configured literal IP targets and publishes timestamped readings via an authenticated read-only API. The Android `MonitoringClient` accepts only HTTPS origins, refuses redirects, makes requests off the UI thread, and holds its token in memory only. This is manually refreshed; no background collection occurs on Android. The backend is bound to loopback and needs an internal TLS/VPN proxy. Shared identity, RBAC, collector isolation, availability history and escalation are future requirements. All other modules still show labeled sample records.
-
-## Local Wi-Fi mode
-`WifiDiscovery.kt` reads Android `ConnectivityManager` active Wi-Fi link properties, without requesting location. Discovery is explicitly started by the user, bound to the Wi-Fi `Network` socket factory, limited to private IPv4 subnets /24–/30 and 20 concurrent probes, with a 350 ms TCP timeout on 22/80/443. Cancellation is available and runs on Wi-Fi change or screen disposal. A successful handshake indicates a responsive port only; non-responsive hosts are not asserted offline. No results are uploaded or persisted. Dashboard and other feature modules still use labeled demonstration data; the local Wi-Fi screen does not grant access to real infrastructure management.
+Future real monitoring, incidents, endpoint inspection, asset ownership and alerting require separate authorized backend/agent integrations. Never claim local TCP reachability provides those capabilities. There is no organization authentication; privileged functions must remain unavailable until a secure backend exists.

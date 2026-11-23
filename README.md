@@ -1,20 +1,11 @@
 # TBC InfraGuard
 
-Native Android operations console for the Tanzania Broadcasting Corporation IT department. **Current deliverable is a demonstration foundation, not a production monitoring or authentication system.** No live TBC infrastructure is contacted. In-memory sample records are labeled in the interface and disappear on process restart.
+Native Android Wi-Fi discovery application built with Kotlin, Jetpack Compose and Material 3. No organization sign-in or backend is needed to see the **phone's active Wi-Fi IP/gateway** or to record responsive local hosts. The supplied TBC shield is used on the splash screen.
 
-## Included
-- Kotlin, Jetpack Compose, Material 3 light/dark, responsive scrolling, five-tab navigation and notification/profile screens.
-- Seven demo roles with explicit client-side navigation permissions (not a security boundary).
-- Searchable infrastructure and asset lists, incident and asset registration forms with validation, vulnerability sample queue, and local reactive repository state.
-- Explicit integration-required screens for patching, change approvals, remote access, helpdesk and reporting. These do not execute operations.
+When the app is foregrounded and joins Wi-Fi, it checks hosts on its private IPv4 subnet (prefix /24–/30, up to 254 addresses). It checks only TCP ports 22, 80 and 443 with bounded concurrency and stores responsive IP addresses and ports locally. Overview shows the current check; Assets shows locally recorded addresses and last-seen times. You can recheck, stop discovery and delete records for the current subnet. No sample data or simulated alerts are shown.
 
-See [BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md), [ARCHITECTURE.md](ARCHITECTURE.md), [API_INTEGRATION.md](API_INTEGRATION.md), and [SECURITY.md](SECURITY.md).
+**Important:** This is NOT a complete list of devices using Wi-Fi. A host with closed ports, a sleeping host, or a client isolated by the router will not appear. Hosts on Ethernet may appear if reachable on the same subnet. Local records are keyed by subnet/IP (not SSID), so different networks sharing an IP range may share records. An unlisted host is not proven offline. The app does not run background scans while closed, inspect host internals, or upload results.
 
-## Brand asset
-The splash and login screens use the supplied TBC-NMS shield artwork (`app/src/main/res/drawable-nodpi/tbc_nms_logo.webp`), resized for mobile delivery. Its embedded “TBC-NMS” wording is part of the supplied image; the surrounding product name remains **TBC InfraGuard**. Confirm artwork usage rights and final naming with TBC before distribution.
+Security, notification and remote management modules remain unavailable until real integrations exist. The optional separately deployed [TCP monitoring pilot](backend/README.md) remains available behind its own connection controls.
 
-## Live monitoring pilot
-Infrastructure can now show **real TCP reachability** via the bundled [monitoring service](backend/README.md). It requires approved targets, deployment on an internal server, an HTTPS/VPN proxy and a per-session token. The rest of the application (overview, security, assets and notifications) still uses visibly marked sample data. Do not interpret demo role selection as authentication or production authorization.
-
-## On-device Wi-Fi view (no sign-in)
-The app now opens directly into the dashboard. Infrastructure displays the active Wi-Fi IPv4 address and gateway without a backend, VPN or token. A user-initiated local TCP check can discover responding hosts on ports 22, 80 and 443 within a private IPv4 /24-or-smaller subnet (max 254 addresses). No automatic scan, full device enumeration, SSH access or vulnerability scan is performed. Android does not expose the SSID without additional location permission, which this app does not request. Other screens retain explicitly marked sample content. Server monitoring remains optional and separate.
+See [BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [SECURITY.md](SECURITY.md).
