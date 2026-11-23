@@ -30,6 +30,14 @@ object WifiDiscovery {
         return WifiSnapshot(network, link.address as Inet4Address, link.prefixLength, gateway)
     }
 
+    fun subnetKey(snapshot: WifiSnapshot): String {
+        val bytes = snapshot.ip.address
+        val value = bytes.fold(0L) { acc, b -> (acc shl 8) or (b.toLong() and 255) }
+        val mask = (0xffffffffL shl (32 - snapshot.prefix)) and 0xffffffffL
+        val base = value and mask
+        return (24 downTo 0 step 8).joinToString(".") { ((base ushr it) and 255).toString() } + "/${snapshot.prefix}"
+    }
+
     // Restrict discovery to a single private IPv4 /24 or smaller subnet, never the entire routed network.
     fun candidates(snapshot: WifiSnapshot): List<String> {
         val bytes = snapshot.ip.address
